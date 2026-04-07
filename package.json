@@ -1,7 +1,7 @@
 {
   "name": "shutupskill",
   "version": "1.0.0",
-  "description": "让 AI 不废话：GPT-5.4/Kimi 达到 Claude Opus 4.6 标准",
+  "description": "让 AI 不废话：通过提示词优化改善输出风格",
   "main": "index.js",
   "bin": {
     "shutup": "./index.js"

@@ -13,7 +13,7 @@
 ## 安装
 
 ```bash
-openclaw skill install https://github.com/你的用户名/shutupskill
+openclaw skill install https://github.com/AIPMAndy/shutupskill
 ```
 
 ## 使用
@@ -21,6 +21,9 @@ openclaw skill install https://github.com/你的用户名/shutupskill
 ```bash
 /shutup --all              # 优化所有
 /shutup --agent dev        # 优化指定
+/shutup --upgrade          # 升级到最新版本
+/shutup --status           # 查看优化状态
+/shutup --diff             # 预览注入内容
 /shutup --template-only    # 查看模板
 /shutup --restore          # 恢复备份
 ```
@@ -33,6 +36,8 @@ openclaw skill install https://github.com/你的用户名/shutupskill
 - ✅ 改变输出风格（少废话）
 - ✅ 引导工作流程（先做后说）
 - ✅ 提供检查清单
+- ✅ 版本管理和升级
+- ✅ 自动备份（保留最近 5 个版本）
 
 **做不到的**：
 - ❌ 保证任务完成率
@@ -45,7 +50,7 @@ openclaw skill install https://github.com/你的用户名/shutupskill
 
 ### 优化前
 ```
-"好的，让我先读取文件..."
+"好的，让我先读取文件，然后分析性能瓶颈..."
 "您希望优先优化哪个？"
 ```
 
@@ -77,6 +82,19 @@ openclaw skill install https://github.com/你的用户名/shutupskill
 ```
 [问题][动作][原因]。[下一步]。
 ```
+
+## 适用场景
+
+### ✅ 适合
+- 啰嗦的模型（GPT-5.4、Kimi）
+- 任务型对话（编程、数据分析）
+- 追求效率
+
+### ⚠️ 不适合
+- 本来就简洁的模型（Claude）
+- 需要详细解释的场景
+- 创意写作
+- 情感交流
 
 ## 兼容性
 

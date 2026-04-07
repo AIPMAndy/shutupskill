@@ -7,11 +7,12 @@ const os = require('os');
 const OPENCLAW_DIR = path.join(os.homedir(), '.openclaw');
 const AGENTS_DIR = path.join(OPENCLAW_DIR, 'agents');
 const BACKUP_DIR = path.join(OPENCLAW_DIR, 'skills', 'shutupskill', 'backups');
+const VERSION = '1.0.0';
 
 const OPTIMIZATION_TEMPLATE = `
 ---
 
-# 输出优化规则
+# 输出优化规则 (shutupskill v${VERSION})
 
 ## 核心目标
 改善输出风格和工作流程：
@@ -129,6 +130,18 @@ function getAllAgents() {
   });
 }
 
+function getAgentStatus(agentName) {
+  const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
+  if (!fs.existsSync(soulPath)) return 'no_soul';
+  
+  const content = fs.readFileSync(soulPath, 'utf-8');
+  if (content.includes('输出优化规则')) {
+    const match = content.match(/shutupskill v([\d.]+)/);
+    return match ? `v${match[1]}` : 'v?.?.?';
+  }
+  return 'not_optimized';
+}
+
 function backupSoul(agentName) {
   const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
   if (!fs.existsSync(soulPath)) return false;
@@ -140,11 +153,28 @@ function backupSoul(agentName) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const backupPath = path.join(BACKUP_DIR, `${agentName}_SOUL_${timestamp}.md`);
   fs.copyFileSync(soulPath, backupPath);
-  console.log(`  backed up: ${agentName}`);
+  
+  // 清理旧备份，只保留最近 5 个
+  cleanOldBackups(agentName);
+  
   return true;
 }
 
-function optimizeAgent(agentName) {
+function cleanOldBackups(agentName) {
+  if (!fs.existsSync(BACKUP_DIR)) return;
+  
+  const backups = fs.readdirSync(BACKUP_DIR)
+    .filter(f => f.startsWith(`${agentName}_SOUL_`))
+    .sort()
+    .reverse();
+  
+  // 保留最近 5 个，删除其余
+  backups.slice(5).forEach(backup => {
+    fs.unlinkSync(path.join(BACKUP_DIR, backup));
+  });
+}
+
+function optimizeAgent(agentName, upgrade = false) {
   const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
 
   if (!fs.existsSync(soulPath)) {
@@ -155,8 +185,15 @@ function optimizeAgent(agentName) {
   let content = fs.readFileSync(soulPath, 'utf-8');
 
   if (content.includes('输出优化规则')) {
-    console.log(`  skip ${agentName}: already optimized`);
-    return false;
+    if (!upgrade) {
+      console.log(`  skip ${agentName}: already optimized (use --upgrade to update)`);
+      return false;
+    }
+    
+    // 升级：删除旧规则，追加新规则
+    const regex = /\n---\n\n# 输出优化规则[\s\S]*?(?=\n---\n|$)/;
+    content = content.replace(regex, '');
+    console.log(`  upgrading ${agentName}...`);
   }
 
   backupSoul(agentName);
@@ -186,8 +223,37 @@ function restoreAgent(agentName) {
   const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
 
   fs.copyFileSync(latestBackup, soulPath);
-  console.log(`  restored: ${agentName}`);
+  console.log(`  restored: ${agentName} (from ${backups[0]})`);
   return true;
+}
+
+function showStatus() {
+  const agents = getAllAgents();
+  if (agents.length === 0) {
+    console.log('no agents found');
+    return;
+  }
+
+  console.log('\nAgent Status:\n');
+  agents.forEach(agent => {
+    const status = getAgentStatus(agent);
+    let statusText;
+    if (status === 'no_soul') {
+      statusText = '❌ no SOUL.md';
+    } else if (status === 'not_optimized') {
+      statusText = '⚪ not optimized';
+    } else {
+      statusText = `✅ optimized (${status})`;
+    }
+    console.log(`  ${agent.padEnd(20)} ${statusText}`);
+  });
+  console.log('');
+}
+
+function showDiff() {
+  console.log('\n=== Preview: Content to be injected ===\n');
+  console.log(OPTIMIZATION_TEMPLATE);
+  console.log('\n=== End of preview ===\n');
 }
 
 function main() {
@@ -195,15 +261,28 @@ function main() {
 
   if (args.includes('--help') || args.includes('-h')) {
     console.log(`
-shutupskill - 让 AI 不废话
+shutupskill v${VERSION} - 让 AI 不废话
 
 用法:
-  /shutup --all              优化所有 agent
-  /shutup --agent <name>     优化指定 agent
-  /shutup --template-only    输出模板
-  /shutup --restore          恢复备份
+  /shutup --all                优化所有 agent
+  /shutup --agent <name>       优化指定 agent
+  /shutup --upgrade            升级已优化的 agent 到最新版本
+  /shutup --status             查看所有 agent 的优化状态
+  /shutup --diff               预览会注入的内容
+  /shutup --template-only      输出完整模板
+  /shutup --restore            恢复所有备份
   /shutup --restore --agent <name>  恢复指定 agent
     `);
+    return;
+  }
+
+  if (args.includes('--status')) {
+    showStatus();
+    return;
+  }
+
+  if (args.includes('--diff')) {
+    showDiff();
     return;
   }
 
@@ -218,7 +297,7 @@ shutupskill - 让 AI 不废话
     return;
   }
 
-  console.log(`found ${agents.length} agents: ${agents.join(', ')}\n`);
+  const upgrade = args.includes('--upgrade');
 
   if (args.includes('--restore')) {
     if (args.includes('--agent')) {
@@ -232,8 +311,9 @@ shutupskill - 让 AI 不废话
   }
 
   if (args.includes('--all')) {
+    console.log(`found ${agents.length} agents\n`);
     let count = 0;
-    agents.forEach(a => { if (optimizeAgent(a)) count++; });
+    agents.forEach(a => { if (optimizeAgent(a, upgrade)) count++; });
     console.log(`\noptimized ${count} agents. restart openclaw.`);
   } else if (args.includes('--agent')) {
     const idx = args.indexOf('--agent');
@@ -242,10 +322,11 @@ shutupskill - 让 AI 不废话
       console.log(`"${name}" not found. available: ${agents.join(', ')}`);
       return;
     }
-    optimizeAgent(name);
+    optimizeAgent(name, upgrade);
     console.log('\nrestart openclaw.');
   } else {
     console.log('usage: /shutup --all or /shutup --agent <name>');
+    console.log('run /shutup --help for more options');
   }
 }
 
@@ -253,4 +334,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { optimizeAgent, restoreAgent, getAllAgents };
+module.exports = { optimizeAgent, restoreAgent, getAllAgents, getAgentStatus };

@@ -1,13 +1,13 @@
 {
   "name": "shutupskill",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "让 AI 不废话：通过提示词优化改善输出风格",
   "main": "index.js",
   "bin": {
     "shutup": "./index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node index.js --status"
   },
   "keywords": [
     "openclaw",
@@ -16,7 +16,6 @@
     "concise",
     "prompt",
     "gpt",
-    "claude",
     "kimi"
   ],
   "author": "Andy",
@@ -24,12 +23,12 @@
   "openclaw": {
     "skill": {
       "name": "shutup",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "commands": [
         {
           "name": "shutup",
-          "description": "让 AI 不废话",
-          "usage": "/shutup [--all|--agent <name>|--template-only|--restore]"
+          "description": "让 AI 不废话（全局 SOUL 注入版）",
+          "usage": "/shutup [--apply|--upgrade|--status|--diff|--restore]"
         }
       ]
     }

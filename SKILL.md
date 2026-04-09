@@ -1,105 +1,60 @@
+---
+name: shutupskill
+description: 让 AI 输出更短、更直接的 OpenClaw 提示词注入工具。通过向全局 SOUL.md 追加精简规则，减少废话、鼓励先做后说、推动更紧凑的工具调用。适用于用户明确想“少废话”“更像 Claude/Opus 一样直接”“压缩输出 token”“优化 agent 输出风格”的场景。当前版本按全局 SOUL.md 工作，不提供真实的 per-agent 注入。
+---
+
 # shutupskill
 
-让 AI 不废话 — 通过提示词优化改善输出风格。
+向 OpenClaw 的全局 `SOUL.md` 注入一段简洁输出规则，改变整体回复风格。
 
-## 功能
+## 能做什么
 
-通过在 agent 的 SOUL.md 中注入优化规则，引导 AI 改变输出风格：
-- 先做后说，减少询问
-- 工具并行调用提示
-- 错误重试引导
-- 极简输出规范
+- 减少客套话、铺垫、犹豫表达
+- 引导先做后说
+- 强化工具调用前检查
+- 提醒遇错重试与验证
 
-## 安装
+## 不能做什么
+
+- 不能提升模型智力
+- 不能修复工具本身的精度问题
+- 不能实现真正的 per-agent 隔离控制
+
+## 工作方式
+
+当前版本只处理全局：
+- 目标文件：`/home/node/.openclaw/workspace/SOUL.md`
+- 备份目录：`~/.openclaw/skills/shutupskill/backups/`
+
+## 命令
 
 ```bash
-openclaw skill install https://github.com/AIPMAndy/shutupskill
+shutup --apply
+shutup --upgrade
+shutup --status
+shutup --diff
+shutup --template-only
+shutup --restore
 ```
 
-## 使用
+默认不带参数时，等同于：
 
 ```bash
-/shutup --all              # 优化所有
-/shutup --agent dev        # 优化指定
-/shutup --upgrade          # 升级到最新版本
-/shutup --status           # 查看优化状态
-/shutup --diff             # 预览注入内容
-/shutup --template-only    # 查看模板
-/shutup --restore          # 恢复备份
+shutup --apply
 ```
 
-## 工作原理
+## 输出解释
 
-这是一个**提示词注入工具**，通过在 `~/.openclaw/agents/<agent>/workspace/SOUL.md` 末尾追加优化规则来改变 AI 行为。
+- `layout: global`：当前环境按全局 SOUL 工作
+- `scope: global only`：只会影响全局，不是单独 agent
+- `state: optimized`：检测到注入内容已存在
 
-**能做到的**：
-- ✅ 改变输出风格（少废话）
-- ✅ 引导工作流程（先做后说）
-- ✅ 提供检查清单
-- ✅ 版本管理和升级
-- ✅ 自动备份（保留最近 5 个版本）
+## 恢复
 
-**做不到的**：
-- ❌ 保证任务完成率
-- ❌ 强制工具精准度
-- ❌ 让弱模型变成强模型
+恢复最近一次备份：
 
-**效果取决于模型本身的能力。**
-
-## 效果
-
-### 优化前
-```
-"好的，让我先读取文件，然后分析性能瓶颈..."
-"您希望优先优化哪个？"
+```bash
+shutup --restore
 ```
 
-### 优化后
-```
-[直接执行]
-"发现 3 个问题，优化中。"
-"完成。响应时间降 60%。"
-```
-
-## 输出规则
-
-**删除：**
-- 冠词、语气填充词、客套话、犹豫性表达
-
-**允许：**
-- 短句、碎片句
-
-**优先短同义词：**
-- 「大」不是「庞大」
-- 「修」不是「实施解决方案」
-
-**保持精确：**
-- 技术术语
-- 代码块
-- 报错信息
-
-**推荐句式：**
-```
-[问题][动作][原因]。[下一步]。
-```
-
-## 适用场景
-
-### ✅ 适合
-- 啰嗦的模型（GPT-5.4、Kimi）
-- 任务型对话（编程、数据分析）
-- 追求效率
-
-### ⚠️ 不适合
-- 本来就简洁的模型（Claude）
-- 需要详细解释的场景
-- 创意写作
-- 情感交流
-
-## 兼容性
-
-OpenClaw >= 2026.3.28
-
-## 许可证
-
-MIT
+恢复后重启 OpenClaw 网关使配置生效。

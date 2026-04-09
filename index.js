@@ -6,8 +6,9 @@ const os = require('os');
 
 const OPENCLAW_DIR = path.join(os.homedir(), '.openclaw');
 const AGENTS_DIR = path.join(OPENCLAW_DIR, 'agents');
-const BACKUP_DIR = path.join(OPENCLAW_DIR, 'skills', 'shutupskill', 'backups');
-const VERSION = '1.0.0';
+const SKILL_DIR = path.join(OPENCLAW_DIR, 'skills', 'shutupskill');
+const BACKUP_DIR = path.join(SKILL_DIR, 'backups');
+const VERSION = '1.1.0';
 
 const OPTIMIZATION_TEMPLATE = `
 ---
@@ -122,216 +123,209 @@ Edit > Bash sed
 **目标：通过提示词引导，改善输出风格和工作效率。**
 `;
 
+function ensureDir(dir) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+function getGlobalSoulPath() {
+  return path.join('/home/node/.openclaw/workspace', 'SOUL.md');
+}
+
 function getAllAgents() {
   if (!fs.existsSync(AGENTS_DIR)) return [];
   return fs.readdirSync(AGENTS_DIR).filter(name => {
     const agentDir = path.join(AGENTS_DIR, name);
-    return fs.statSync(agentDir).isDirectory();
-  });
-}
-
-function getAgentStatus(agentName) {
-  const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
-  if (!fs.existsSync(soulPath)) return 'no_soul';
-  
-  const content = fs.readFileSync(soulPath, 'utf-8');
-  if (content.includes('输出优化规则')) {
-    const match = content.match(/shutupskill v([\d.]+)/);
-    return match ? `v${match[1]}` : 'v?.?.?';
-  }
-  return 'not_optimized';
-}
-
-function backupSoul(agentName) {
-  const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
-  if (!fs.existsSync(soulPath)) return false;
-
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = path.join(BACKUP_DIR, `${agentName}_SOUL_${timestamp}.md`);
-  fs.copyFileSync(soulPath, backupPath);
-  
-  // 清理旧备份，只保留最近 5 个
-  cleanOldBackups(agentName);
-  
-  return true;
-}
-
-function cleanOldBackups(agentName) {
-  if (!fs.existsSync(BACKUP_DIR)) return;
-  
-  const backups = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.startsWith(`${agentName}_SOUL_`))
-    .sort()
-    .reverse();
-  
-  // 保留最近 5 个，删除其余
-  backups.slice(5).forEach(backup => {
-    fs.unlinkSync(path.join(BACKUP_DIR, backup));
-  });
-}
-
-function optimizeAgent(agentName, upgrade = false) {
-  const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
-
-  if (!fs.existsSync(soulPath)) {
-    console.log(`  skip ${agentName}: no SOUL.md`);
-    return false;
-  }
-
-  let content = fs.readFileSync(soulPath, 'utf-8');
-
-  if (content.includes('输出优化规则')) {
-    if (!upgrade) {
-      console.log(`  skip ${agentName}: already optimized (use --upgrade to update)`);
+    try {
+      return fs.statSync(agentDir).isDirectory();
+    } catch {
       return false;
     }
-    
-    // 升级：删除旧规则，追加新规则
-    const regex = /\n---\n\n# 输出优化规则[\s\S]*?(?=\n---\n|$)/;
-    content = content.replace(regex, '');
-    console.log(`  upgrading ${agentName}...`);
+  });
+}
+
+function detectMode() {
+  const globalSoul = getGlobalSoulPath();
+  if (fs.existsSync(globalSoul)) {
+    return { mode: 'global', soulPath: globalSoul };
+  }
+  return { mode: 'unsupported', soulPath: globalSoul };
+}
+
+function getStatus() {
+  const { mode, soulPath } = detectMode();
+  if (mode === 'unsupported') return { mode, optimized: false, version: null, soulPath };
+
+  const content = fs.readFileSync(soulPath, 'utf-8');
+  const optimized = content.includes('输出优化规则');
+  const match = content.match(/shutupskill v([\d.]+)/);
+  return {
+    mode,
+    optimized,
+    version: match ? match[1] : null,
+    soulPath,
+  };
+}
+
+function backupSoul() {
+  const { soulPath } = detectMode();
+  if (!fs.existsSync(soulPath)) return false;
+
+  ensureDir(BACKUP_DIR);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupPath = path.join(BACKUP_DIR, `global_SOUL_${timestamp}.md`);
+  fs.copyFileSync(soulPath, backupPath);
+  cleanOldBackups();
+  return backupPath;
+}
+
+function cleanOldBackups() {
+  if (!fs.existsSync(BACKUP_DIR)) return;
+  const backups = fs.readdirSync(BACKUP_DIR)
+    .filter(f => f.startsWith('global_SOUL_'))
+    .sort()
+    .reverse();
+  backups.slice(5).forEach(file => fs.unlinkSync(path.join(BACKUP_DIR, file)));
+}
+
+function stripInjectedBlock(content) {
+  return content.replace(/\n---\n\n# 输出优化规则 \(shutupskill v[\d.]+\)[\s\S]*$/m, '');
+}
+
+function optimizeGlobal(upgrade = false) {
+  const info = detectMode();
+  if (info.mode === 'unsupported') {
+    console.log('unsupported layout: global SOUL.md not found');
+    return false;
   }
 
-  backupSoul(agentName);
+  let content = fs.readFileSync(info.soulPath, 'utf-8');
+  const alreadyOptimized = content.includes('输出优化规则');
+
+  if (alreadyOptimized && !upgrade) {
+    console.log('already optimized (use --upgrade to refresh)');
+    return false;
+  }
+
+  backupSoul();
+  if (alreadyOptimized) content = stripInjectedBlock(content);
   content += OPTIMIZATION_TEMPLATE;
-  fs.writeFileSync(soulPath, content, 'utf-8');
-  console.log(`  done: ${agentName}`);
+  fs.writeFileSync(info.soulPath, content, 'utf-8');
+  console.log(`done: global SOUL updated (${info.soulPath})`);
   return true;
 }
 
-function restoreAgent(agentName) {
+function restoreGlobal() {
   if (!fs.existsSync(BACKUP_DIR)) {
-    console.log(`  no backups`);
+    console.log('no backups');
     return false;
   }
 
   const backups = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.startsWith(`${agentName}_SOUL_`))
+    .filter(f => f.startsWith('global_SOUL_'))
     .sort()
     .reverse();
 
   if (backups.length === 0) {
-    console.log(`  no backup for ${agentName}`);
+    console.log('no backups');
     return false;
   }
 
   const latestBackup = path.join(BACKUP_DIR, backups[0]);
-  const soulPath = path.join(AGENTS_DIR, agentName, 'workspace', 'SOUL.md');
-
+  const { soulPath } = detectMode();
   fs.copyFileSync(latestBackup, soulPath);
-  console.log(`  restored: ${agentName} (from ${backups[0]})`);
+  console.log(`restored: ${latestBackup}`);
   return true;
 }
 
 function showStatus() {
+  const info = getStatus();
   const agents = getAllAgents();
-  if (agents.length === 0) {
-    console.log('no agents found');
+
+  console.log('\nshutupskill status\n');
+  console.log(`layout: ${info.mode}`);
+  console.log(`soul:   ${info.soulPath}`);
+  console.log(`agents: ${agents.length ? agents.join(', ') : '(none)'}`);
+
+  if (info.mode === 'unsupported') {
+    console.log('state:  unsupported');
+    console.log('note:   global SOUL.md not found');
+    console.log('');
     return;
   }
 
-  console.log('\nAgent Status:\n');
-  agents.forEach(agent => {
-    const status = getAgentStatus(agent);
-    let statusText;
-    if (status === 'no_soul') {
-      statusText = '❌ no SOUL.md';
-    } else if (status === 'not_optimized') {
-      statusText = '⚪ not optimized';
-    } else {
-      statusText = `✅ optimized (${status})`;
-    }
-    console.log(`  ${agent.padEnd(20)} ${statusText}`);
-  });
+  if (info.optimized) {
+    console.log(`state:  optimized (v${info.version || '?'})`);
+    console.log('scope:  global only');
+  } else {
+    console.log('state:  not optimized');
+    console.log('scope:  global only');
+  }
   console.log('');
 }
 
 function showDiff() {
-  console.log('\n=== Preview: Content to be injected ===\n');
+  console.log('\n=== Preview: Content to be injected (global SOUL only) ===\n');
   console.log(OPTIMIZATION_TEMPLATE);
   console.log('\n=== End of preview ===\n');
+}
+
+function printHelp() {
+  console.log(`
+shutupskill v${VERSION} - 让 AI 不废话
+
+用法:
+  shutup --apply            注入到全局 SOUL.md
+  shutup --upgrade          升级已注入内容
+  shutup --status           查看当前状态
+  shutup --diff             预览注入内容
+  shutup --template-only    输出完整模板
+  shutup --restore          恢复最近备份
+  shutup --help             查看帮助
+
+说明:
+  - 当前版本按全局 SOUL.md 工作，不做假 agent 级注入
+  - 如果你的 OpenClaw 未来支持 per-agent SOUL，再扩展
+    `);
 }
 
 function main() {
   const args = process.argv.slice(2);
 
-  if (args.includes('--help') || args.includes('-h')) {
-    console.log(`
-shutupskill v${VERSION} - 让 AI 不废话
-
-用法:
-  /shutup --all                优化所有 agent
-  /shutup --agent <name>       优化指定 agent
-  /shutup --upgrade            升级已优化的 agent 到最新版本
-  /shutup --status             查看所有 agent 的优化状态
-  /shutup --diff               预览会注入的内容
-  /shutup --template-only      输出完整模板
-  /shutup --restore            恢复所有备份
-  /shutup --restore --agent <name>  恢复指定 agent
-    `);
-    return;
-  }
-
-  if (args.includes('--status')) {
-    showStatus();
-    return;
-  }
-
-  if (args.includes('--diff')) {
-    showDiff();
-    return;
-  }
-
-  if (args.includes('--template-only')) {
-    console.log(OPTIMIZATION_TEMPLATE);
-    return;
-  }
-
-  const agents = getAllAgents();
-  if (agents.length === 0) {
-    console.log('no agents');
-    return;
-  }
-
-  const upgrade = args.includes('--upgrade');
-
+  if (args.includes('--help') || args.includes('-h')) return printHelp();
+  if (args.includes('--status')) return showStatus();
+  if (args.includes('--diff')) return showDiff();
+  if (args.includes('--template-only')) return console.log(OPTIMIZATION_TEMPLATE);
   if (args.includes('--restore')) {
-    if (args.includes('--agent')) {
-      const idx = args.indexOf('--agent');
-      restoreAgent(args[idx + 1]);
-    } else {
-      agents.forEach(restoreAgent);
-    }
-    console.log('\nrestart: openclaw restart');
+    restoreGlobal();
+    console.log('\nrestart: openclaw gateway restart');
     return;
   }
 
-  if (args.includes('--all')) {
-    console.log(`found ${agents.length} agents\n`);
-    let count = 0;
-    agents.forEach(a => { if (optimizeAgent(a, upgrade)) count++; });
-    console.log(`\noptimized ${count} agents. restart openclaw.`);
-  } else if (args.includes('--agent')) {
-    const idx = args.indexOf('--agent');
-    const name = args[idx + 1];
-    if (!agents.includes(name)) {
-      console.log(`"${name}" not found. available: ${agents.join(', ')}`);
-      return;
-    }
-    optimizeAgent(name, upgrade);
-    console.log('\nrestart openclaw.');
-  } else {
-    console.log('usage: /shutup --all or /shutup --agent <name>');
-    console.log('run /shutup --help for more options');
+  if (args.includes('--upgrade')) {
+    optimizeGlobal(true);
+    console.log('\nrestart: openclaw gateway restart');
+    return;
   }
+
+  if (args.includes('--apply') || args.length === 0) {
+    optimizeGlobal(false);
+    console.log('\nrestart: openclaw gateway restart');
+    return;
+  }
+
+  console.log('unknown args');
+  printHelp();
 }
 
 if (require.main === module) {
   main();
 }
 
-module.exports = { optimizeAgent, restoreAgent, getAllAgents, getAgentStatus };
+module.exports = {
+  detectMode,
+  getStatus,
+  optimizeGlobal,
+  restoreGlobal,
+  getAllAgents,
+  stripInjectedBlock,
+};

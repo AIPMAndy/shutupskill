@@ -199,10 +199,13 @@ function optimizeGlobal(upgrade = false) {
   }
 
   let content = fs.readFileSync(info.soulPath, 'utf-8');
+  const match = content.match(/shutupskill v([\d.]+)/);
+  const currentVersion = match ? match[1] : null;
   const alreadyOptimized = content.includes('输出优化规则');
+  const needsUpgrade = alreadyOptimized && currentVersion !== VERSION;
 
-  if (alreadyOptimized && !upgrade) {
-    console.log('already optimized (use --upgrade to refresh)');
+  if (alreadyOptimized && !upgrade && !needsUpgrade) {
+    console.log(`already optimized (v${currentVersion || VERSION})`);
     return false;
   }
 
@@ -210,7 +213,12 @@ function optimizeGlobal(upgrade = false) {
   if (alreadyOptimized) content = stripInjectedBlock(content);
   content += OPTIMIZATION_TEMPLATE;
   fs.writeFileSync(info.soulPath, content, 'utf-8');
-  console.log(`done: global SOUL updated (${info.soulPath})`);
+
+  if (needsUpgrade && !upgrade) {
+    console.log(`done: upgraded global SOUL ${currentVersion} -> ${VERSION} (${info.soulPath})`);
+  } else {
+    console.log(`done: global SOUL updated (${info.soulPath})`);
+  }
   return true;
 }
 
